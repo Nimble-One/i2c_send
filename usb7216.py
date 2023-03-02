@@ -100,27 +100,8 @@ def write_config_register(bus: SMBus, offset: int, bytes: bytearray):
 
 # -----------------------------------------------------------------------------
 def usb_attach(bus: SMBus, during_runtime: bool = False):
-    
-    command = [0x99, 0x37, 
-               0xaa, 0x55, 
-               0x00]
-    
-    count = len(command)
-    
-    # ---
-    # write the command block fo rregister write
-    payload = [0x00, 0x00, # write access
-               0x06 + count, # number of bytes to write to memory
-               0x00, # for write access 
-               count] # bytes to write
-    w = i2c_msg.write(I2C_SLAVE_ADDR, 
-                      payload)
-    bus.i2c_rdwr(w)
-
-    # ---
-    # special command (table 275)
     w = i2c_msg.write(I2C_SLAVE_ADDR,
-                      command)
+                      [0xaa, 0x55, 0x00])
     bus.i2c_rdwr(w)
 # -----------------------------------------------------------------------------
 

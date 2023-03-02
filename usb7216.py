@@ -85,13 +85,6 @@ def write_config_register(bus: SMBus, offset: int, bytes: bytearray):
                     (offset >> 8) & 0xff, 
                     (offset & 0xff)]
 
-    # w = i2c_msg.write(I2C_SLAVE_ADDR, 
-    #                   [0x00, 0x00, # memory addr (???)
-    #                    0x08, # number of bytes to write to memory
-    #                    0x00, # write configuration register 
-    #                    0x02, # write two bytes to VID register
-    #                    0xbf, 0x80, 0x30, 0x00, # VID register addr is 0xbf803000
-    #                    0xad, 0xde]) # bytes to write
     w = i2c_msg.write(I2C_SLAVE_ADDR, 
                       payload + offset_bytes + bytes)
 
@@ -108,12 +101,18 @@ def write_config_register(bus: SMBus, offset: int, bytes: bytearray):
 # -----------------------------------------------------------------------------
 def usb_attach(bus: SMBus, during_runtime: bool = False):
     
+    command = [0x99, 0x37, 
+               0xaa, 0x55, 
+               0x00]
+    
+    count = len(command)
+    
     # ---
     # write the command block fo rregister write
     payload = [0x00, 0x00, # write access
-               0x06, # number of bytes to write to memory
+               0x06 + count, # number of bytes to write to memory
                0x00, # for write access 
-               5] # bytes to write
+               count] # bytes to write
     w = i2c_msg.write(I2C_SLAVE_ADDR, 
                       payload)
     bus.i2c_rdwr(w)
@@ -121,9 +120,7 @@ def usb_attach(bus: SMBus, during_runtime: bool = False):
     # ---
     # special command (table 275)
     w = i2c_msg.write(I2C_SLAVE_ADDR,
-                      [0x99, 0x37, 
-                       0xaa, 0x55, 
-                       0x00])
+                      command)
     bus.i2c_rdwr(w)
 # -----------------------------------------------------------------------------
 
@@ -150,37 +147,37 @@ with SMBus(BUS_ADDR) as bus:
     vendor_id_reg = read_config_register(bus, 0x3000, 2)
     debug_bytearray("vendor_id_reg: ", vendor_id_reg)
 
+    # will not persist a reset !!!
     write_config_register(bus, 0x3000, [0xde, 0xad])
 
     vendor_id_reg = read_config_register(bus, 0x3000, 2)
     debug_bytearray("vendor_id_reg: ", vendor_id_reg)
 
+    usb_attach(bus)
+
     # ---
     # table 277
-    w = i2c_msg.write(I2C_SLAVE_ADDR, 
-                      [0x00, 0x00, # memory addr (???)
-                       0x08, # number of bytes to write to memory
-                       0x00, # write configuration register 
-                       0x02, # write two bytes to VID register
-                       0xbf, 0x80, 0x30, 0x00, # VID register addr is 0xbf803000
-                       0xad, 0xde]) # bytes to write
-    bus.i2c_rdwr(w)
+    # w = i2c_msg.write(I2C_SLAVE_ADDR, 
+    #                   [0x00, 0x00, # memory addr (???)
+    #                    0x08, # number of bytes to write to memory
+    #                    0x00, # write configuration register 
+    #                    0x02, # write two bytes to VID register
+    #                    0xbf, 0x80, 0x30, 0x00, # VID register addr is 0xbf803000
+    #                    0xad, 0xde]) # bytes to write
+    # bus.i2c_rdwr(w)
     
-    # ---
-    # execute the 'Configuration Register Access' command
-    w = i2c_msg.write(I2C_SLAVE_ADDR,
-                      [0x99, 0x37, 0x00]) # command 9937h + 00h (command completion)
-    bus.i2c_rdwr(w)
+    # # ---
+    # # execute the 'Configuration Register Access' command
+    # w = i2c_msg.write(I2C_SLAVE_ADDR,
+    #                   [0x99, 0x37, 0x00]) # command 9937h + 00h (command completion)
+    # bus.i2c_rdwr(w)
 
-    # check
-    vendor_id_reg = read_config_register(bus, 0x3000, 2)
-    debug_bytearray("vendor_id_reg: ", vendor_id_reg)
-
-
+    # # check
+    # vendor_id_reg = read_config_register(bus, 0x3000, 2)
+    # debug_bytearray("vendor_id_reg: ", vendor_id_reg)
 
 
 
-    usb_attach(bus)
     
     # write the command block to the buffer area
     # w = i2c_msg.write(I2C_SLAVE_ADDR, 

@@ -1,13 +1,6 @@
 from smbus2 import SMBus, i2c_msg
 
 
-# eval board
-# ----------
-# "To enable operation from the SPI device, install shunts to pins 1 to 2 and 4 to 5 of J18"
-# >> we don't want that so remove the shunts (default)
-
-# AN2935 page 178
-
 I2C_SLAVE_ADDR = 0x2d
 BUS_ADDR = 1
 USB7216_BASE_ADDR = 0xbf80_0000
@@ -37,9 +30,7 @@ def read_config_register(bus: SMBus, offset: int, count: int) -> list[int]:
 
     # ---
     # execute the 'Configuration Register Access' command
-    w = i2c_msg.write(I2C_SLAVE_ADDR,
-                      [0x99, 0x37, 0x00]) # command 9937h + 00h (command completion)
-    bus.i2c_rdwr(w)
+    config_register_access(bus)
 
     # ---
     # read the data from memory, starting at memory offset 06h, which is where the data byte starts
@@ -52,17 +43,15 @@ def read_config_register(bus: SMBus, offset: int, count: int) -> list[int]:
     r = i2c_msg.read(I2C_SLAVE_ADDR, count) # client addr and read bit
     bus.i2c_rdwr(r)
 
-    # ---
-    # debug
-    print(f"I²C: read {count} bytes from addr {hex(offset)}:")
-    for dat in r:
-        print(hex(dat))
-
     # --- reverse output and discard last byte
     bytes = bytearray()
     for dat in r:
         bytes.append(dat)
-        print(hex(dat))
+
+    # ---
+    # debug
+    debug_bytearray(f"I²C: read {count} bytes from addr {hex(offset)}:", bytes)
+
     return bytes[::-1][:-1]
 # -----------------------------------------------------------------------------
 
@@ -85,13 +74,23 @@ def write_config_register(bus: SMBus, offset: int, bytes: bytearray):
                     (offset >> 8) & 0xff, 
                     (offset & 0xff)]
 
+    payload += offset_bytes + bytes
     w = i2c_msg.write(I2C_SLAVE_ADDR, 
-                      payload + offset_bytes + bytes)
-
+                      payload)
     bus.i2c_rdwr(w)
-    
+
+    # ---
+    # debug
+    debug_bytearray(f"I²C: wrote {count + 4} bytes to addr {hex(offset)}:", payload)
+
     # ---
     # execute the 'Configuration Register Access' command
+    config_register_access(bus)
+# -----------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------
+def config_register_access(bus):
     w = i2c_msg.write(I2C_SLAVE_ADDR,
                       [0x99, 0x37, 0x00]) # command 9937h + 00h (command completion)
     bus.i2c_rdwr(w)
@@ -107,8 +106,22 @@ def usb_attach(bus: SMBus, during_runtime: bool = True):
 
 
 # -----------------------------------------------------------------------------
+def usb_flex(bus: SMBus, port: int, usb2_enable: bool = True, usb3_enable: bool = True):
+    # AN2935 page 15
+    if port > 0 and port < 7:
+        # flex usb2
+        if usb2_enable:
+            write_config_register(bus, 0x0808, [port])
+
+        # flex usb3
+        if usb3_enable:
+            write_config_register(bus, 0x0828, [port])
+# -----------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------
 def debug_bytearray(msg: str, bytes: bytearray):
-    print(msg, end="")
+    print(msg)
     for b in bytes:
         print(hex(b) + " ", end="")
     print("")
@@ -118,6 +131,7 @@ def debug_bytearray(msg: str, bytes: bytearray):
 # -----------------------------------------------------------------------------
 with SMBus(BUS_ADDR) as bus:
 
+    # attach hub and keep i2c alive
     usb_attach(bus)
 
     # should be: bytearray(b'\x05\xa2\x00\xc1')
@@ -136,6 +150,7 @@ with SMBus(BUS_ADDR) as bus:
     vendor_id_reg = read_config_register(bus, 0x3000, 2)
     debug_bytearray("vendor_id_reg: ", vendor_id_reg)
 
+    # TODO: doesnt work, ask MJ why
     # flexconnect port1 usb2+3
     # word = 0
     # word |= ((1 << 12) # port 1
@@ -148,8 +163,8 @@ with SMBus(BUS_ADDR) as bus:
     #     | 1) # port 1
     # write_config_register(bus, 0x3440, [word >> 8, word & 0xff])
 
-    # flex usb2 on port 1
-    write_config_register(bus, 0x0808, [0x01])
+    # TODO: doesnt work with port != 1, ask MJ why
+    usb_flex(bus, 1)
 
-    # flex usb3 on port 1
-    write_config_register(bus, 0x0828, [0x01])
+    # TODO: what is this, ask MJ
+    write_config_register(bus, 0x5400, [0x01])

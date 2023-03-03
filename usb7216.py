@@ -101,7 +101,7 @@ def write_config_register(bus: SMBus, offset: int, bytes: bytearray):
 # -----------------------------------------------------------------------------
 def usb_attach(bus: SMBus, during_runtime: bool = False):
     w = i2c_msg.write(I2C_SLAVE_ADDR,
-                      [0xaa, 0x55, 0x00])
+                      [0xaa, 0x55 + (1 if during_runtime else 0), 0x00])
     bus.i2c_rdwr(w)
 # -----------------------------------------------------------------------------
 
@@ -118,6 +118,8 @@ def debug_bytearray(msg: str, bytes: bytearray):
 # -----------------------------------------------------------------------------
 with SMBus(BUS_ADDR) as bus:
 
+    # usb_attach(bus, True)
+
     # should be: bytearray(b'\x05\xa2\x00\xc1')
     device_revision_register = read_config_register(bus, 0x0000, 4)
     debug_bytearray("device_revision_register: ", device_revision_register)
@@ -129,12 +131,30 @@ with SMBus(BUS_ADDR) as bus:
     debug_bytearray("vendor_id_reg: ", vendor_id_reg)
 
     # will not persist a reset !!!
-    write_config_register(bus, 0x3000, [0xde, 0xad])
+    write_config_register(bus, 0x3000, [0xad, 0xde])
 
     vendor_id_reg = read_config_register(bus, 0x3000, 2)
     debug_bytearray("vendor_id_reg: ", vendor_id_reg)
 
-    usb_attach(bus)
+    # flexconnect port1 usb2+3
+    word = 0
+    word |= ((1 << 12) # port 1
+        | (1 << 11) # usb3 enable
+        | (0 << 8) # no timeout
+        | (0 << 7) # usb3 attach and reattach
+        | (0 << 6) # usb2 attach and reattach
+        | (1 << 5) # enable flexconnect
+        | (1 << 4) # usb2 enable
+        | 1) # port 1
+    # write_config_register(bus, 0x3440, [word >> 8, word & 0xff])
+
+    # flex usb2
+    write_config_register(bus, 0x0808, [0x01])
+
+    # flex usb2
+    write_config_register(bus, 0x0828, [0x01])
+
+    usb_attach(bus, True)
 
     # ---
     # table 277

@@ -106,6 +106,23 @@ def usb_attach(bus: SMBus, during_runtime: bool = True):
 
 
 # -----------------------------------------------------------------------------
+def usb_set_vbus_pass_thru_pio(bus: SMBus):
+    # see AN4550 section 3.3
+    
+    # config VBUS_PASS_THRU (to be done AFTER hub is attached)
+    USB3_PASS_THRU = 0x00   # 0x00: The VBUS to USB3 Hub comes from Internal PIO24
+    USB2_PASS_THRU = 0x00   # 0x00: The VBUS to USB2 Hub comes from Internal PIO32
+    write_config_register(bus, 0x3c40, [(USB3_PASS_THRU << 2) | USB2_PASS_THRU])
+
+    # configure 0xBF80_0903 and 0xBF80_0904 to set PIO24 / PIO32 as OUTPUT
+    write_config_register(bus, 0x0903, [0x01, 0x01])
+    
+    # configure 0xBF80_0923 and 0xBF80_0924 to set PIO24 / PIO32 as HIGH
+    write_config_register(bus, 0x0923, [0x01, 0x01])
+# -----------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------
 def usb_flex(bus: SMBus, port: int, usb2_enable: bool = True, usb3_enable: bool = True):
     # AN2935 page 15
     if port > 0 and port < 7:
@@ -132,25 +149,32 @@ def debug_bytearray(msg: str, bytes: bytearray):
 with SMBus(BUS_ADDR) as bus:
 
     # attach hub and keep i2c alive
-    usb_attach(bus)
+    usb_attach(bus)  
+
+    # config VBUS_PASS_THRU register to use PIO24/32, 
+    # that avoids sending 2.7v on the VBUS_DET pin (on the EVB),
+    # or routing some wires and a voltage divider on the final board.
+    usb_set_vbus_pass_thru_pio(bus)
 
     # should be: bytearray(b'\x05\xa2\x00\xc1')
     device_revision_register = read_config_register(bus, 0x0000, 4)
     debug_bytearray("device_revision_register: ", device_revision_register)
 
-    usb2_sys_config_reg = read_config_register(bus, 0x0808, 4)
-    debug_bytearray("usb2_sys_config_reg: ", usb2_sys_config_reg)
+    # usb2_sys_config_reg = read_config_register(bus, 0x0808, 4)
+    # debug_bytearray("usb2_sys_config_reg: ", usb2_sys_config_reg)
 
-    vendor_id_reg = read_config_register(bus, 0x3000, 2)
-    debug_bytearray("vendor_id_reg: ", vendor_id_reg)
+    # vendor_id_reg = read_config_register(bus, 0x3000, 2)
+    # debug_bytearray("vendor_id_reg: ", vendor_id_reg)
 
-    # will not persist a reset !!!
-    write_config_register(bus, 0x3000, [0xad, 0xde])
+    # # will not persist a reset !!!
+    # write_config_register(bus, 0x3000, [0xad, 0xde])
 
-    vendor_id_reg = read_config_register(bus, 0x3000, 2)
-    debug_bytearray("vendor_id_reg: ", vendor_id_reg)
+    # vendor_id_reg = read_config_register(bus, 0x3000, 2)
+    # debug_bytearray("vendor_id_reg: ", vendor_id_reg)
 
-    # TODO: doesnt work, ask MJ why
+    # The follwing code doesnt work, these commands are for the Hub Feature Controller only
+    # (accessed thru USB directly)
+    #
     # flexconnect port1 usb2+3
     # word = 0
     # word |= ((1 << 12) # port 1
@@ -163,8 +187,12 @@ with SMBus(BUS_ADDR) as bus:
     #     | 1) # port 1
     # write_config_register(bus, 0x3440, [word >> 8, word & 0xff])
 
-    # TODO: doesnt work with port != 1, ask MJ why
+    # # TODO: doesnt work with port != 1, ask MJ why
     usb_flex(bus, 1)
 
-    # TODO: what is this, ask MJ
+    # # TODO: what is this, ask MJ
     write_config_register(bus, 0x5400, [0x01])
+
+    # port2
+    # usb_flex(bus, 2)
+    # write_config_register(bus, 0x5800, [0x01])

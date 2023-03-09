@@ -1,5 +1,5 @@
 from smbus2 import SMBus, i2c_msg
-
+from enum import Enum
 
 I2C_SLAVE_ADDR = 0x2d
 BUS_ADDR = 1
@@ -123,16 +123,27 @@ def usb_set_vbus_pass_thru_pio(bus: SMBus):
 
 
 # -----------------------------------------------------------------------------
-def usb_flex(bus: SMBus, port: int, usb2_enable: bool = True, usb3_enable: bool = True):
-    # AN2935 page 15
-    if port > 0 and port < 7:
-        # flex usb2
-        if usb2_enable:
-            write_config_register(bus, 0x0808, [port])
+class FlexPort(Enum):
+    # PORT = (phy usb2, phy usb3)
+    PORT0 = 0, 0,
+    PORT1 = 1, 1,
+    PORT2 = 3, 3,
+    PORT3 = 4, 4,
+    PORT4 = 5, 5,
 
-        # flex usb3
-        if usb3_enable:
-            write_config_register(bus, 0x0828, [port])
+def usb_flex(bus: SMBus, port: FlexPort, usb2_enable: bool = True, usb3_enable: bool = True):
+    # AN2935 page 15
+    # flex usb2
+    if usb2_enable:
+        write_config_register(bus, 0x0808, [port.value[0]])
+
+    # flex usb3
+    if usb3_enable:
+        write_config_register(bus, 0x0828, [port.value[1]])
+
+    # config port 1 cc ?
+    if port == FlexPort.PORT1:
+        write_config_register(bus, 0x5400, [0x01])
 # -----------------------------------------------------------------------------
 
 
@@ -159,40 +170,5 @@ with SMBus(BUS_ADDR) as bus:
     # should be: bytearray(b'\x05\xa2\x00\xc1')
     device_revision_register = read_config_register(bus, 0x0000, 4)
     debug_bytearray("device_revision_register: ", device_revision_register)
-
-    # usb2_sys_config_reg = read_config_register(bus, 0x0808, 4)
-    # debug_bytearray("usb2_sys_config_reg: ", usb2_sys_config_reg)
-
-    # vendor_id_reg = read_config_register(bus, 0x3000, 2)
-    # debug_bytearray("vendor_id_reg: ", vendor_id_reg)
-
-    # # will not persist a reset !!!
-    # write_config_register(bus, 0x3000, [0xad, 0xde])
-
-    # vendor_id_reg = read_config_register(bus, 0x3000, 2)
-    # debug_bytearray("vendor_id_reg: ", vendor_id_reg)
-
-    # The follwing code doesnt work, these commands are for the Hub Feature Controller only
-    # (accessed thru USB directly)
-    #
-    # flexconnect port1 usb2+3
-    # word = 0
-    # word |= ((1 << 12) # port 1
-    #     | (1 << 11) # usb3 enable
-    #     | (0 << 8) # no timeout
-    #     | (0 << 7) # usb3 attach and reattach
-    #     | (0 << 6) # usb2 attach and reattach
-    #     | (1 << 5) # enable flexconnect
-    #     | (1 << 4) # usb2 enable
-    #     | 1) # port 1
-    # write_config_register(bus, 0x3440, [word >> 8, word & 0xff])
-
-    # # TODO: doesnt work with port != 1, ask MJ why
-    usb_flex(bus, 1)
-
-    # # TODO: what is this, ask MJ
-    write_config_register(bus, 0x5400, [0x01])
-
-    # port2
-    # usb_flex(bus, 2)
-    # write_config_register(bus, 0x5800, [0x01])
+    
+    usb_flex(bus, FlexPort.PORT4)
